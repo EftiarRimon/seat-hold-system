@@ -27,6 +27,9 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
         return true;
     }
 
+    private static string EffectiveStatus(Hold h, DateTime now) =>
+        h.Status == HoldStatus.Held && h.ExpiresAt <= now ? HoldStatus.Expired : h.Status;
+
     [HttpPost("classes/{classId}/holds")]
     public async Task<IActionResult> CreateHold(string classId)
     {
@@ -75,5 +78,100 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         return Created($"/holds/{hold.Id}",
             new HoldResponse(hold.Id, hold.ClassId, hold.StudentId, hold.Status, hold.ExpiresAt));
+    }
+
+    [HttpGet("holds/{holdId}")]
+    public async Task<IActionResult> GetHold(string holdId)
+    {
+        var h = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
+        if (h is null)
+            return NotFound(new { error = "Abedon paoya jayni." });
+
+        return Ok(new
+        {
+            holdId = h.Id,
+            classId = h.ClassId,
+            status = EffectiveStatus(h, DateTime.UtcNow),
+            expiresAt = h.ExpiresAt
+        });
+    }
+
+    [HttpPost("holds/{holdId}/confirm")]
+    public async Task<IActionResult> Confirm(string holdId)
+    {
+        if (!TryGetStudentId(out var studentId, out var error))
+            return BadRequest(new { error });
+
+        var peek = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
+        if (peek is null)
+            return NotFound(new { error = "Abedon paoya jayni." });
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM classes WHERE \"Id\" = {peek.ClassId} FOR UPDATE");
+
+        var hold = await db.Holds.FirstAsync(x => x.Id == holdId);
+        if (hold.StudentId != studentId)
+            return StatusCode(403, new { error = "Ei abedon apnar na." });
+
+        if (hold.Status == HoldStatus.Confirmed)
+            return Ok(new { holdId = hold.Id, status = hold.Status });
+
+        if (hold.Status != HoldStatus.Held)
+            return Conflict(new { error = "Ei abedon ar confirm kora jabe na." });
+
+        if (hold.ExpiresAt <= DateTime.UtcNow)
+            return Conflict(new { error = "Abedoner meyad shesh hoye geche." });
+
+        hold.Status = HoldStatus.Confirmed;
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(new { holdId = hold.Id, status = hold.Status });
+    }
+
+    [HttpDelete("holds/{holdId}")]
+    public async Task<IActionResult> Cancel(string holdId)
+    {
+        if (!TryGetStudentId(out var studentId, out var error))
+            return BadRequest(new { error });
+
+        var hold = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
+        if (hold is null)
+            return NotFound(new { error = "Abedon paoya jayni." });
+        if (hold.StudentId != studentId)
+            return StatusCode(403, new { error = "Ei abedon apnar na." });
+        if (hold.Status == HoldStatus.Confirmed)
+            return Conflict(new { error = "Nishchit bhorti batil kora jabe na." });
+
+        var now = DateTime.UtcNow;
+        await db.Holds
+            .Where(h => h.Id == holdId && h.Status == HoldStatus.Held && h.ExpiresAt > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(h => h.Status, HoldStatus.Cancelled));
+
+        return NoContent();
+    }
+
+    [HttpGet("me/holds")]
+    public async Task<IActionResult> MyHolds()
+    {
+        if (!TryGetStudentId(out var studentId, out var error))
+            return BadRequest(new { error });
+
+        var now = DateTime.UtcNow;
+        var rows = await (from h in db.Holds.AsNoTracking()
+                          join c in db.Classes on h.ClassId equals c.Id
+                          where h.StudentId == studentId
+                          orderby h.CreatedAt descending
+                          select new { Hold = h, ClassName = c.Name }).ToListAsync();
+
+        return Ok(rows.Select(r => new
+        {
+            holdId = r.Hold.Id,
+            classId = r.Hold.ClassId,
+            className = r.ClassName,
+            status = EffectiveStatus(r.Hold, now),
+            expiresAt = r.Hold.ExpiresAt
+        }));
     }
 }
