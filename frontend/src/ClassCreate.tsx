@@ -34,9 +34,10 @@ export default function ClassCreate({ onCreated }: { onCreated: () => void }) {
 
   return (
     <section className="card">
-      <h2>নতুন class তৈরি (school admin)</h2>
+      <h2>নতুন class তৈরি</h2>
       <form onSubmit={submit} className="row">
         <input
+          className="grow"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="যেমন: Class 6 - Morning Shift"
@@ -46,11 +47,13 @@ export default function ClassCreate({ onCreated }: { onCreated: () => void }) {
           onChange={(e) => setSeats(e.target.value)}
           placeholder="Seat সংখ্যা"
           inputMode="numeric"
-          style={{ width: 110 }}
+          style={{ width: 130 }}
         />
-        <button disabled={busy}>তৈরি করুন</button>
+        <button className="btn" disabled={busy}>
+          তৈরি করুন
+        </button>
       </form>
-      {msg && <p className={msg.ok ? "ok" : "err"}>{msg.text}</p>}
+      {msg && <div className={msg.ok ? "alert ok" : "alert err"}>{msg.text}</div>}
     </section>
   );
 }

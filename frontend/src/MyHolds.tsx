@@ -4,7 +4,7 @@ import { api, ApiError, type Hold } from "./api";
 const REFRESH_MS = 3000;
 
 const LABEL: Record<string, string> = {
-  HELD: "অপেক্ষমাণ (ফি বাকি)",
+  HELD: "ফি বাকি",
   CONFIRMED: "ভর্তি নিশ্চিত",
   EXPIRED: "মেয়াদ শেষ",
   CANCELLED: "বাতিল",
@@ -77,43 +77,34 @@ export default function MyHolds({
   return (
     <section className="card">
       <h2>আমার আবেদন</h2>
-      {error && <p className="err">{error}</p>}
-      {msg && <p className={msg.ok ? "ok" : "err"}>{msg.text}</p>}
-      {holds.length === 0 && !error && <p>এখনো কোনো আবেদন নেই।</p>}
-      {holds.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Class</th>
-              <th>অবস্থা</th>
-              <th>বাকি সময়</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {holds.map((h) => {
-              const left = toMs(h.expiresAt) - now;
-              const status = h.status === "HELD" && left <= 0 ? "EXPIRED" : h.status;
-              const active = status === "HELD";
-              return (
-                <tr key={h.holdId}>
-                  <td>{h.className ?? h.classId}</td>
-                  <td>{LABEL[status] ?? status}</td>
-                  <td>{active ? fmt(left) : "-"}</td>
-                  <td>
-                    <button disabled={!active || busyId === h.holdId} onClick={() => act(h, "pay")}>
-                      ভর্তি ফি দিন
-                    </button>{" "}
-                    <button disabled={!active || busyId === h.holdId} onClick={() => act(h, "cancel")}>
-                      বাতিল
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      {error && <div className="alert err">{error}</div>}
+      {msg && <div className={msg.ok ? "alert ok" : "alert err"}>{msg.text}</div>}
+      {holds.length === 0 && !error && <p className="hint">এখনো কোনো আবেদন নেই।</p>}
+
+      <div className="hold-list">
+        {holds.map((h) => {
+          const left = toMs(h.expiresAt) - now;
+          const status = h.status === "HELD" && left <= 0 ? "EXPIRED" : h.status;
+          const active = status === "HELD";
+          return (
+            <div className="hold" key={h.holdId}>
+              <div>
+                <div className="name">{h.className ?? h.classId}</div>
+                <span className={`badge ${status}`}>{LABEL[status] ?? status}</span>{" "}
+                {active && <span className="timer">⏱ {fmt(left)}</span>}
+              </div>
+              <div className="actions">
+                <button className="btn" disabled={!active || busyId === h.holdId} onClick={() => act(h, "pay")}>
+                  ভর্তি ফি দিন
+                </button>
+                <button className="btn ghost" disabled={!active || busyId === h.holdId} onClick={() => act(h, "cancel")}>
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

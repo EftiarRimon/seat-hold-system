@@ -7,10 +7,12 @@ export default function ClassList({
   studentId,
   refreshKey,
   onApplied,
+  readOnly = false,
 }: {
   studentId: string;
   refreshKey: number;
   onApplied: (hold: Hold) => void;
+  readOnly?: boolean;
 }) {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [error, setError] = useState("");
@@ -50,42 +52,43 @@ export default function ClassList({
   return (
     <section className="card">
       <h2>Class তালিকা</h2>
-      {error && <p className="err">{error}</p>}
-      {msg && <p className="err">{msg}</p>}
-      {classes.length === 0 && !error && <p>এখনো কোনো class নেই।</p>}
-      {classes.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Class</th>
-              <th>মোট</th>
-              <th>Hold-এ</th>
-              <th>নিশ্চিত</th>
-              <th>খালি</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {classes.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c.totalSeats}</td>
-                <td>{c.heldSeats}</td>
-                <td>{c.confirmedSeats}</td>
-                <td>{c.availableSeats}</td>
-                <td>
-                  <button
-                    onClick={() => apply(c)}
-                    disabled={c.availableSeats <= 0 || busyId === c.id}
-                  >
-                    {c.availableSeats <= 0 ? "Seat নেই" : "আবেদন করুন"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {error && <div className="alert err">{error}</div>}
+      {msg && <div className="alert err">{msg}</div>}
+      {classes.length === 0 && !error && <p className="hint">এখনো কোনো class নেই।</p>}
+
+      <div className="grid">
+        {classes.map((c) => {
+          const confirmedPct = (c.confirmedSeats / c.totalSeats) * 100;
+          const heldPct = (c.heldSeats / c.totalSeats) * 100;
+          const full = c.availableSeats <= 0;
+          return (
+            <div className="class-card" key={c.id}>
+              <h3>{c.name}</h3>
+              <div className="stats">
+                <span className="chip">মোট {c.totalSeats}</span>
+                <span className="chip">Hold-এ {c.heldSeats}</span>
+                <span className="chip">নিশ্চিত {c.confirmedSeats}</span>
+                <span className={full ? "chip full" : "chip free"}>
+                  {full ? "Seat নেই" : `খালি ${c.availableSeats}`}
+                </span>
+              </div>
+              <div className="bar">
+                <div className="confirmed" style={{ width: `${confirmedPct}%` }} />
+                <div className="held" style={{ width: `${heldPct}%` }} />
+              </div>
+              <div className="legend">
+                <span><i className="dot" style={{ background: "var(--ok)" }} />নিশ্চিত</span>
+                <span><i className="dot" style={{ background: "#f59e0b" }} />Hold-এ</span>
+              </div>
+              {!readOnly && (
+                <button className="btn" onClick={() => apply(c)} disabled={full || busyId === c.id}>
+                  {full ? "Seat নেই" : "আবেদন করুন"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

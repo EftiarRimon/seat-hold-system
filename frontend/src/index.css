@@ -1,1 +1,25 @@
-body { margin: 0; }
+:root {
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --ok: #15803d;
+  --ok-bg: #dcfce7;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  --err: #b91c1c;
+  --err-bg: #fee2e2;
+  --border: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Sans Bengali", "Hind Siliguri", "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
+}
