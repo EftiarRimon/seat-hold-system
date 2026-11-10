@@ -13,11 +13,15 @@ public record ClassSeatsResponse(
 
 [ApiController]
 [Route("classes")]
-public class ClassesController(AppDbContext db) : ControllerBase
+public class ClassesController(AppDbContext db, IConfiguration config) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateClassRequest req)
     {
+        var pw = config["ADMIN_PASSWORD"];
+        if (!string.IsNullOrEmpty(pw) && Request.Headers["X-Admin-Password"].ToString() != pw)
+            return StatusCode(401, new { error = "Class তৈরি করতে admin পাসওয়ার্ড লাগবে।" });
+
         var name = req.Name?.Trim();
         if (string.IsNullOrEmpty(name))
             return BadRequest(new { error = "Class-এর নাম লিখুন।" });

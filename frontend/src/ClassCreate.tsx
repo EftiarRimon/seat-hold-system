@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { api, ApiError } from "./api";
 
-export default function ClassCreate({ onCreated }: { onCreated: () => void }) {
+export default function ClassCreate({
+  onCreated,
+  adminPassword,
+}: {
+  onCreated: () => void;
+  adminPassword?: string;
+}) {
   const [name, setName] = useState("");
   const [seats, setSeats] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -20,7 +26,7 @@ export default function ClassCreate({ onCreated }: { onCreated: () => void }) {
     }
     setBusy(true);
     try {
-      await api.createClass(name.trim(), n);
+      await api.createClass(name.trim(), n, adminPassword);
       setName("");
       setSeats("");
       setMsg({ ok: true, text: "নতুন class তৈরি হয়েছে।" });

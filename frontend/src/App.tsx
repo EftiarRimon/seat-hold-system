@@ -3,6 +3,7 @@ import "./App.css";
 import ClassCreate from "./ClassCreate";
 import ClassList from "./ClassList";
 import MyHolds from "./MyHolds";
+import AdminGate from "./AdminGate";
 
 const STORAGE_KEY = "studentId";
 const VIEW_KEY = "view";
@@ -67,10 +68,19 @@ export default function App() {
       </nav>
 
       {view === "admin" ? (
-        <main>
-          <ClassCreate onCreated={bump} />
-          <ClassList studentId="" refreshKey={refreshKey} onApplied={bump} readOnly />
-        </main>
+                <AdminGate>
+          {(pw, logout) => (
+            <main>
+              {pw && (
+                <button className="btn ghost" style={{ marginBottom: 12 }} onClick={logout}>
+                  Logout
+                </button>
+              )}
+              <ClassCreate onCreated={bump} adminPassword={pw} />
+              <ClassList studentId="" refreshKey={refreshKey} onApplied={bump} readOnly />
+            </main>
+          )}
+        </AdminGate>
       ) : (
         <main>
           <section className="card">
