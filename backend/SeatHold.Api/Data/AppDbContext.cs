@@ -23,8 +23,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.StudentId).IsRequired().HasMaxLength(17);
             e.Property(x => x.Status).IsRequired().HasMaxLength(20);
+            e.Property(x => x.TransactionId).HasMaxLength(50);
             e.HasIndex(x => new { x.ClassId, x.Status });
             e.HasIndex(x => x.StudentId);
+            e.HasIndex(x => x.TransactionId)
+                .IsUnique()
+                .HasFilter("\"TransactionId\" IS NOT NULL");
             e.HasOne<SchoolClass>().WithMany().HasForeignKey(x => x.ClassId);
         });
     }

@@ -13,6 +13,7 @@ public class ApiFactory : WebApplicationFactory<Program>
             ?? "Host=localhost;Port=5433;Database=seats_test;Username=app;Password=app";
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", cs);
         Environment.SetEnvironmentVariable("HOLD_DURATION_SECONDS", "600");
+        Environment.SetEnvironmentVariable("ADMIN_PASSWORD", "");
     }
 }
 
@@ -20,8 +21,9 @@ public class HoldTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static string Sid(int n) => (20150000000000000L + n).ToString();
+    private static readonly long RunBase = 10_000_000_000_000_000L + Random.Shared.NextInt64(0, 80_000_000_000_000_000L);
 
+    private static string Sid(int n) => (RunBase + n).ToString();
     private async Task<string> CreateClass(int seats)
     {
         var res = await _client.PostAsJsonAsync("/classes",
@@ -101,5 +103,14 @@ public class HoldTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var c = await GetClass(classId);
         Assert.Equal(seats, c.GetProperty("heldSeats").GetInt32() + c.GetProperty("confirmedSeats").GetInt32());
         Assert.Equal(0, c.GetProperty("availableSeats").GetInt32());
+    }
+        [Fact]
+    public async Task Same_student_cannot_apply_to_two_classes()
+    {
+        var a = await CreateClass(10);
+        var b = await CreateClass(10);
+
+        Assert.Equal(HttpStatusCode.Created, (await Hold(a, Sid(7))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Hold(b, Sid(7))).StatusCode);
     }
 }

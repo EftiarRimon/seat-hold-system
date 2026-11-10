@@ -16,4 +16,5 @@ public class Hold
     public string Status { get; set; } = HoldStatus.Held;
     public DateTime ExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? TransactionId { get; set; }
 }

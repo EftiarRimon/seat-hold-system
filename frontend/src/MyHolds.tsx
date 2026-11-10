@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type Hold } from "./api";
 
 const REFRESH_MS = 3000;
+const TXN_RE = /^[A-Za-z0-9]{6,30}$/;
 
 const LABEL: Record<string, string> = {
   HELD: "ফি বাকি",
@@ -33,6 +34,7 @@ export default function MyHolds({
   const [error, setError] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busyId, setBusyId] = useState("");
+  const [txn, setTxn] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -59,7 +61,7 @@ export default function MyHolds({
     setMsg(null);
     try {
       if (kind === "pay") {
-        await api.confirmHold(h.holdId, studentId);
+        await api.confirmHold(h.holdId, studentId, (txn[h.holdId] ?? "").trim());
         setMsg({ ok: true, text: "ভর্তি ফি জমা হয়েছে, ভর্তি নিশ্চিত।" });
       } else {
         await api.cancelHold(h.holdId, studentId);
@@ -86,21 +88,44 @@ export default function MyHolds({
           const left = toMs(h.expiresAt) - now;
           const status = h.status === "HELD" && left <= 0 ? "EXPIRED" : h.status;
           const active = status === "HELD";
+          const value = txn[h.holdId] ?? "";
+          const validTxn = TXN_RE.test(value.trim());
           return (
             <div className="hold" key={h.holdId}>
               <div>
                 <div className="name">{h.className ?? h.classId}</div>
                 <span className={`badge ${status}`}>{LABEL[status] ?? status}</span>{" "}
                 {active && <span className="timer">⏱ {fmt(left)}</span>}
+                {status === "CONFIRMED" && h.transactionId && (
+                  <div className="hint">
+                    Transaction নম্বর: <span className="mono">{h.transactionId}</span>
+                  </div>
+                )}
               </div>
-              <div className="actions">
-                <button className="btn" disabled={!active || busyId === h.holdId} onClick={() => act(h, "pay")}>
-                  ভর্তি ফি দিন
-                </button>
-                <button className="btn ghost" disabled={!active || busyId === h.holdId} onClick={() => act(h, "cancel")}>
-                  বাতিল
-                </button>
-              </div>
+              {status !== "CONFIRMED" && status !== "CANCELLED" && (
+                <div className="pay">
+                  <input
+                    value={value}
+                    disabled={!active}
+                    onChange={(e) => setTxn({ ...txn, [h.holdId]: e.target.value })}
+                    placeholder="Transaction নম্বর (৬–৩০ অক্ষর/সংখ্যা)"
+                  />
+                  <button
+                    className="btn"
+                    disabled={!active || !validTxn || busyId === h.holdId}
+                    onClick={() => act(h, "pay")}
+                  >
+                    ভর্তি ফি দিন
+                  </button>
+                  <button
+                    className="btn ghost"
+                    disabled={!active || busyId === h.holdId}
+                    onClick={() => act(h, "cancel")}
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

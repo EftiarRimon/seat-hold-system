@@ -1,9 +1,10 @@
 import { useState } from "react";
 import "./App.css";
+import AdminGate from "./AdminGate";
+import AdminHolds from "./AdminHolds";
 import ClassCreate from "./ClassCreate";
 import ClassList from "./ClassList";
 import MyHolds from "./MyHolds";
-import AdminGate from "./AdminGate";
 
 const STORAGE_KEY = "studentId";
 const VIEW_KEY = "view";
@@ -68,7 +69,7 @@ export default function App() {
       </nav>
 
       {view === "admin" ? (
-                <AdminGate>
+        <AdminGate>
           {(pw, logout) => (
             <main>
               {pw && (
@@ -78,6 +79,7 @@ export default function App() {
               )}
               <ClassCreate onCreated={bump} adminPassword={pw} />
               <ClassList studentId="" refreshKey={refreshKey} onApplied={bump} readOnly />
+              <AdminHolds password={pw} refreshKey={refreshKey} />
             </main>
           )}
         </AdminGate>

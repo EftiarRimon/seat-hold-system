@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using SeatHold.Api.Data;
 using SeatHold.Api.Models;
@@ -6,10 +8,13 @@ using SeatHold.Api.Models;
 namespace SeatHold.Api.Controllers;
 
 public record HoldResponse(string HoldId, string ClassId, string StudentId, string Status, DateTime ExpiresAt);
+public record ConfirmRequest(string? TransactionId);
 
 [ApiController]
 public class HoldsController(AppDbContext db, IConfiguration config) : ControllerBase
 {
+    private static readonly Regex TxnPattern = new("^[A-Za-z0-9]{6,30}$");
+
     private bool TryGetStudentId(out string studentId, out string error)
     {
         studentId = Request.Headers["X-Student-Id"].FirstOrDefault()?.Trim() ?? "";
@@ -38,8 +43,13 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         var duration = config.GetValue<int?>("HOLD_DURATION_SECONDS") ?? 600;
         if (duration <= 0) duration = 600;
+        var onePerStudent = config.GetValue<bool?>("ONE_APPLICATION_PER_STUDENT") ?? true;
 
         await using var tx = await db.Database.BeginTransactionAsync();
+
+        // একই শিক্ষার্থীর দুটো আবেদন একসাথে এলে একটা অপরটার জন্য অপেক্ষা করবে
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({studentId}))");
 
         // Class row lock: এই transaction শেষ না হওয়া পর্যন্ত অন্য request এখানে অপেক্ষা করবে
         await db.Database.ExecuteSqlInterpolatedAsync(
@@ -51,12 +61,23 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         var now = DateTime.UtcNow;
 
-        var alreadyActive = await db.Holds.AnyAsync(h => h.ClassId == classId
-            && h.StudentId == studentId
-            && (h.Status == HoldStatus.Confirmed
-                || (h.Status == HoldStatus.Held && h.ExpiresAt > now)));
-        if (alreadyActive)
-            return Conflict(new { error = "এই class-এ আপনার আগে থেকেই একটি চলমান আবেদন বা নিশ্চিত ভর্তি আছে।" });
+        if (onePerStudent)
+        {
+            var anyActive = await db.Holds.AnyAsync(h => h.StudentId == studentId
+                && (h.Status == HoldStatus.Confirmed
+                    || (h.Status == HoldStatus.Held && h.ExpiresAt > now)));
+            if (anyActive)
+                return Conflict(new { error = "এই জন্ম নিবন্ধন নম্বর দিয়ে আগে থেকেই একটি আবেদন বা নিশ্চিত ভর্তি আছে। একজন শিক্ষার্থী একটির বেশি আবেদন করতে পারবে না।" });
+        }
+        else
+        {
+            var alreadyActive = await db.Holds.AnyAsync(h => h.ClassId == classId
+                && h.StudentId == studentId
+                && (h.Status == HoldStatus.Confirmed
+                    || (h.Status == HoldStatus.Held && h.ExpiresAt > now)));
+            if (alreadyActive)
+                return Conflict(new { error = "এই class-এ আপনার আগে থেকেই একটি চলমান আবেদন বা নিশ্চিত ভর্তি আছে।" });
+        }
 
         var taken = await db.Holds.CountAsync(h => h.ClassId == classId
             && (h.Status == HoldStatus.Confirmed
@@ -97,10 +118,17 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
     }
 
     [HttpPost("holds/{holdId}/confirm")]
-    public async Task<IActionResult> Confirm(string holdId)
+    public async Task<IActionResult> Confirm(
+        string holdId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ConfirmRequest? req = null)
     {
         if (!TryGetStudentId(out var studentId, out var error))
             return BadRequest(new { error });
+
+        var txn = req?.TransactionId?.Trim();
+        if (string.IsNullOrEmpty(txn)) txn = null;
+        if (txn is not null && !TxnPattern.IsMatch(txn))
+            return BadRequest(new { error = "Transaction নম্বরে শুধু ইংরেজি অক্ষর ও সংখ্যা থাকবে (৬ থেকে ৩০ অক্ষর)।" });
 
         var peek = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
         if (peek is null)
@@ -115,7 +143,7 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
             return StatusCode(403, new { error = "এই আবেদন আপনার নয়।" });
 
         if (hold.Status == HoldStatus.Confirmed)
-            return Ok(new { holdId = hold.Id, status = hold.Status });
+            return Ok(new { holdId = hold.Id, status = hold.Status, transactionId = hold.TransactionId });
 
         if (hold.Status != HoldStatus.Held)
             return Conflict(new { error = "এই আবেদন আর নিশ্চিত করা যাবে না (বাতিল বা মেয়াদ শেষ)।" });
@@ -124,10 +152,18 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
             return Conflict(new { error = "আবেদনের মেয়াদ শেষ হয়ে গেছে, ভর্তি ফি দেওয়া যাবে না।" });
 
         hold.Status = HoldStatus.Confirmed;
-        await db.SaveChangesAsync();
+        hold.TransactionId = txn;
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { error = "এই Transaction নম্বর আগে ব্যবহার করা হয়েছে।" });
+        }
         await tx.CommitAsync();
 
-        return Ok(new { holdId = hold.Id, status = hold.Status });
+        return Ok(new { holdId = hold.Id, status = hold.Status, transactionId = hold.TransactionId });
     }
 
     [HttpDelete("holds/{holdId}")]
@@ -171,7 +207,8 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
             classId = r.Hold.ClassId,
             className = r.ClassName,
             status = EffectiveStatus(r.Hold, now),
-            expiresAt = r.Hold.ExpiresAt
+            expiresAt = r.Hold.ExpiresAt,
+            transactionId = r.Hold.TransactionId
         }));
     }
 }

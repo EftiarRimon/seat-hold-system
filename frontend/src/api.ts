@@ -15,6 +15,18 @@ export type Hold = {
   className?: string;
   status: string;
   expiresAt: string;
+  transactionId?: string | null;
+};
+
+export type AdminHold = {
+  holdId: string;
+  classId: string;
+  className: string;
+  studentId: string;
+  status: string;
+  transactionId: string | null;
+  createdAt: string;
+  expiresAt: string;
 };
 
 export class ApiError extends Error {
@@ -27,12 +39,13 @@ export class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  opts: { method?: string; body?: unknown; studentId?: string;adminPassword?: string } = {}
+  opts: { method?: string; body?: unknown; studentId?: string; adminPassword?: string } = {}
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.studentId) headers["X-Student-Id"] = opts.studentId;
   if (opts.adminPassword) headers["X-Admin-Password"] = opts.adminPassword;
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -56,15 +69,20 @@ export const api = {
   listClasses: () => request<ClassItem[]>("/classes"),
   createClass: (name: string, totalSeats: number, adminPassword?: string) =>
     request<{ id: string }>("/classes", { method: "POST", body: { name, totalSeats }, adminPassword }),
-  adminStatus: () => request<{ required: boolean }>("/admin/status"),
-  adminLogin: (password: string) =>
-    request<{ ok: boolean }>("/admin/login", { method: "POST", body: { password } }),
   createHold: (classId: string, studentId: string) =>
     request<Hold>(`/classes/${classId}/holds`, { method: "POST", studentId }),
   myHolds: (studentId: string) => request<Hold[]>("/me/holds", { studentId }),
-  confirmHold: (holdId: string, studentId: string) =>
-    request<{ holdId: string; status: string }>(`/holds/${holdId}/confirm`, { method: "POST", studentId }),
+  confirmHold: (holdId: string, studentId: string, transactionId: string) =>
+    request<{ holdId: string; status: string }>(`/holds/${holdId}/confirm`, {
+      method: "POST",
+      studentId,
+      body: { transactionId },
+    }),
   cancelHold: (holdId: string, studentId: string) =>
     request<void>(`/holds/${holdId}`, { method: "DELETE", studentId }),
+  adminStatus: () => request<{ required: boolean }>("/admin/status"),
+  adminLogin: (password: string) =>
+    request<{ ok: boolean }>("/admin/login", { method: "POST", body: { password } }),
+  adminHolds: (adminPassword?: string) =>
+    request<AdminHold[]>("/admin/holds", { adminPassword }),
 };
-
