@@ -7,6 +7,8 @@ builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Default")
         ?? "Host=localhost;Port=5433;Database=seats;Username=app;Password=app"));
 
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
@@ -21,7 +23,7 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
-
+app.UseCors();
 app.MapControllers();
 
 app.Run();
