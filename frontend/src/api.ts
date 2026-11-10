@@ -12,6 +12,7 @@ export type ClassItem = {
 export type Hold = {
   holdId: string;
   classId: string;
+  className?: string;
   status: string;
   expiresAt: string;
 };
@@ -57,4 +58,10 @@ export const api = {
     request<{ id: string }>("/classes", { method: "POST", body: { name, totalSeats } }),
   createHold: (classId: string, studentId: string) =>
     request<Hold>(`/classes/${classId}/holds`, { method: "POST", studentId }),
+  myHolds: (studentId: string) => request<Hold[]>("/me/holds", { studentId }),
+  confirmHold: (holdId: string, studentId: string) =>
+    request<{ holdId: string; status: string }>(`/holds/${holdId}/confirm`, { method: "POST", studentId }),
+  cancelHold: (holdId: string, studentId: string) =>
+    request<void>(`/holds/${holdId}`, { method: "DELETE", studentId }),
 };
+

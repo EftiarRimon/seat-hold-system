@@ -2,7 +2,7 @@ import { useState } from "react";
 import "./App.css";
 import ClassCreate from "./ClassCreate";
 import ClassList from "./ClassList";
-import type { Hold } from "./api";
+import MyHolds from "./MyHolds";
 
 const STORAGE_KEY = "studentId";
 
@@ -19,7 +19,7 @@ export default function App() {
   const [input, setInput] = useState(studentId);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [lastHold, setLastHold] = useState<Hold | null>(null);
+  const bump = () => setRefreshKey((k) => k + 1);
 
   function save() {
     const value = input.trim();
@@ -34,6 +34,7 @@ export default function App() {
     }
     setStudentId(value);
     setError("");
+    bump();
   }
 
   return (
@@ -54,20 +55,12 @@ export default function App() {
       </header>
 
       <main>
-        <ClassCreate onCreated={() => setRefreshKey((k) => k + 1)} />
+        <ClassCreate onCreated={bump} />
 
         {studentId ? (
           <>
-            {lastHold && (
-              <p className="ok">
-                আবেদন হয়েছে (Hold: {lastHold.holdId})। আবেদন screen পরের ধাপে আসবে।
-              </p>
-            )}
-            <ClassList
-              studentId={studentId}
-              refreshKey={refreshKey}
-              onApplied={setLastHold}
-            />
+            <ClassList studentId={studentId} refreshKey={refreshKey} onApplied={bump} />
+            <MyHolds studentId={studentId} refreshKey={refreshKey} onChanged={bump} />
           </>
         ) : (
           <p>আবেদন করতে উপরে জন্ম নিবন্ধন নম্বর দিন।</p>
