@@ -10,7 +10,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
@@ -21,7 +21,6 @@ using (var scope = app.Services.CreateScope())
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
 }
 app.UseCors();
 app.MapControllers();
