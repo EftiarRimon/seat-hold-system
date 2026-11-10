@@ -15,5 +15,16 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: ./backend/SeatHold.Api
+    environment:
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=seats;Username=app;Password=app"
+      HOLD_DURATION_SECONDS: "600"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
