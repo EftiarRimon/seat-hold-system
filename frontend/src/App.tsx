@@ -1,5 +1,8 @@
 import { useState } from "react";
 import "./App.css";
+import ClassCreate from "./ClassCreate";
+import ClassList from "./ClassList";
+import type { Hold } from "./api";
 
 const STORAGE_KEY = "studentId";
 
@@ -15,6 +18,8 @@ export default function App() {
   const [studentId, setStudentId] = useState(loadStudentId);
   const [input, setInput] = useState(studentId);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastHold, setLastHold] = useState<Hold | null>(null);
 
   function save() {
     const value = input.trim();
@@ -49,10 +54,23 @@ export default function App() {
       </header>
 
       <main>
+        <ClassCreate onCreated={() => setRefreshKey((k) => k + 1)} />
+
         {studentId ? (
-          <p>Class তালিকা এখানে আসবে।</p>
+          <>
+            {lastHold && (
+              <p className="ok">
+                আবেদন হয়েছে (Hold: {lastHold.holdId})। আবেদন screen পরের ধাপে আসবে।
+              </p>
+            )}
+            <ClassList
+              studentId={studentId}
+              refreshKey={refreshKey}
+              onApplied={setLastHold}
+            />
+          </>
         ) : (
-          <p>শুরু করতে উপরে জন্ম নিবন্ধন নম্বর দিন।</p>
+          <p>আবেদন করতে উপরে জন্ম নিবন্ধন নম্বর দিন।</p>
         )}
       </main>
     </div>
