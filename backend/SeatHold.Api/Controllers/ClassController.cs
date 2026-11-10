@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SeatHold.Api.Data;
 using SeatHold.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace SeatHold.Api.Controllers;
 
@@ -20,9 +20,9 @@ public class ClassesController(AppDbContext db) : ControllerBase
     {
         var name = req.Name?.Trim();
         if (string.IsNullOrEmpty(name))
-            return BadRequest(new { error = "Class-er nam dewa lagbe." });
+            return BadRequest(new { error = "Class-এর নাম লিখুন।" });
         if (req.TotalSeats is null or <= 0)
-            return BadRequest(new { error = "Seat sonkha 0-er beshi hote hobe." });
+            return BadRequest(new { error = "Seat সংখ্যা ০-র বেশি হতে হবে।" });
 
         var c = new SchoolClass { Name = name, TotalSeats = req.TotalSeats.Value };
         db.Classes.Add(c);
@@ -30,7 +30,8 @@ public class ClassesController(AppDbContext db) : ControllerBase
 
         return Created($"/classes/{c.Id}", new ClassResponse(c.Id, c.Name, c.TotalSeats));
     }
-        [HttpGet]
+
+    [HttpGet]
     public async Task<IActionResult> List()
     {
         var now = DateTime.UtcNow;
@@ -57,7 +58,7 @@ public class ClassesController(AppDbContext db) : ControllerBase
         var now = DateTime.UtcNow;
         var c = await db.Classes.FirstOrDefaultAsync(x => x.Id == classId);
         if (c is null)
-            return NotFound(new { error = "Class paoya jayni." });
+            return NotFound(new { error = "Class খুঁজে পাওয়া যায়নি।" });
 
         var held = await db.Holds.CountAsync(h => h.ClassId == classId
             && h.Status == HoldStatus.Held && h.ExpiresAt > now);

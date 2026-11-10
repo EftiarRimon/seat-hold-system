@@ -16,12 +16,12 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
         error = "";
         if (studentId.Length == 0)
         {
-            error = "X-Student-Id header dewa lagbe.";
+            error = "জন্ম নিবন্ধন নম্বর দিন।";
             return false;
         }
         if (studentId.Length != 17 || !studentId.All(char.IsAsciiDigit))
         {
-            error = "Student ID obosshoi 17 digit-er sonkha hote hobe.";
+            error = "জন্ম নিবন্ধন নম্বর অবশ্যই ১৭ অঙ্কের সংখ্যা হতে হবে।";
             return false;
         }
         return true;
@@ -41,13 +41,13 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        // Class row lock: ei transaction shesh na hoa porjonto onno request ekhane wait korbe
+        // Class row lock: এই transaction শেষ না হওয়া পর্যন্ত অন্য request এখানে অপেক্ষা করবে
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM classes WHERE \"Id\" = {classId} FOR UPDATE");
 
         var cls = await db.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
         if (cls is null)
-            return NotFound(new { error = "Class paoya jayni." });
+            return NotFound(new { error = "Class খুঁজে পাওয়া যায়নি।" });
 
         var now = DateTime.UtcNow;
 
@@ -56,13 +56,13 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
             && (h.Status == HoldStatus.Confirmed
                 || (h.Status == HoldStatus.Held && h.ExpiresAt > now)));
         if (alreadyActive)
-            return Conflict(new { error = "Ei class-e apnar already ekta active abedon ba nishchit bhorti ache." });
+            return Conflict(new { error = "এই class-এ আপনার আগে থেকেই একটি চলমান আবেদন বা নিশ্চিত ভর্তি আছে।" });
 
         var taken = await db.Holds.CountAsync(h => h.ClassId == classId
             && (h.Status == HoldStatus.Confirmed
                 || (h.Status == HoldStatus.Held && h.ExpiresAt > now)));
         if (taken >= cls.TotalSeats)
-            return Conflict(new { error = "Ei class-e ar kono seat khali nai." });
+            return Conflict(new { error = "দুঃখিত, এই class-এ আর কোনো seat খালি নেই।" });
 
         var hold = new Hold
         {
@@ -85,7 +85,7 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
     {
         var h = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
         if (h is null)
-            return NotFound(new { error = "Abedon paoya jayni." });
+            return NotFound(new { error = "আবেদন খুঁজে পাওয়া যায়নি।" });
 
         return Ok(new
         {
@@ -104,7 +104,7 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         var peek = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
         if (peek is null)
-            return NotFound(new { error = "Abedon paoya jayni." });
+            return NotFound(new { error = "আবেদন খুঁজে পাওয়া যায়নি।" });
 
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync(
@@ -112,16 +112,16 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         var hold = await db.Holds.FirstAsync(x => x.Id == holdId);
         if (hold.StudentId != studentId)
-            return StatusCode(403, new { error = "Ei abedon apnar na." });
+            return StatusCode(403, new { error = "এই আবেদন আপনার নয়।" });
 
         if (hold.Status == HoldStatus.Confirmed)
             return Ok(new { holdId = hold.Id, status = hold.Status });
 
         if (hold.Status != HoldStatus.Held)
-            return Conflict(new { error = "Ei abedon ar confirm kora jabe na." });
+            return Conflict(new { error = "এই আবেদন আর নিশ্চিত করা যাবে না (বাতিল বা মেয়াদ শেষ)।" });
 
         if (hold.ExpiresAt <= DateTime.UtcNow)
-            return Conflict(new { error = "Abedoner meyad shesh hoye geche." });
+            return Conflict(new { error = "আবেদনের মেয়াদ শেষ হয়ে গেছে, ভর্তি ফি দেওয়া যাবে না।" });
 
         hold.Status = HoldStatus.Confirmed;
         await db.SaveChangesAsync();
@@ -138,11 +138,11 @@ public class HoldsController(AppDbContext db, IConfiguration config) : Controlle
 
         var hold = await db.Holds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == holdId);
         if (hold is null)
-            return NotFound(new { error = "Abedon paoya jayni." });
+            return NotFound(new { error = "আবেদন খুঁজে পাওয়া যায়নি।" });
         if (hold.StudentId != studentId)
-            return StatusCode(403, new { error = "Ei abedon apnar na." });
+            return StatusCode(403, new { error = "এই আবেদন আপনার নয়।" });
         if (hold.Status == HoldStatus.Confirmed)
-            return Conflict(new { error = "Nishchit bhorti batil kora jabe na." });
+            return Conflict(new { error = "নিশ্চিত ভর্তি বাতিল করা যাবে না।" });
 
         var now = DateTime.UtcNow;
         await db.Holds
