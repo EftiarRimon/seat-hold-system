@@ -21,9 +21,11 @@ public class HoldTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static readonly long RunBase = 10_000_000_000_000_000L + Random.Shared.NextInt64(0, 80_000_000_000_000_000L);
+    private static readonly long RunBase =
+        10_000_000_000_000_000L + Random.Shared.NextInt64(0, 80_000_000_000_000_000L);
 
     private static string Sid(int n) => (RunBase + n).ToString();
+
     private async Task<string> CreateClass(int seats)
     {
         var res = await _client.PostAsJsonAsync("/classes",
@@ -66,6 +68,16 @@ public class HoldTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Same_student_cannot_apply_to_two_classes()
+    {
+        var a = await CreateClass(10);
+        var b = await CreateClass(10);
+
+        Assert.Equal(HttpStatusCode.Created, (await Hold(a, Sid(7))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Hold(b, Sid(7))).StatusCode);
+    }
+
+    [Fact]
     public async Task Confirm_twice_increments_confirmed_seats_once()
     {
         var classId = await CreateClass(10);
@@ -104,13 +116,31 @@ public class HoldTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(seats, c.GetProperty("heldSeats").GetInt32() + c.GetProperty("confirmedSeats").GetInt32());
         Assert.Equal(0, c.GetProperty("availableSeats").GetInt32());
     }
-        [Fact]
-    public async Task Same_student_cannot_apply_to_two_classes()
-    {
-        var a = await CreateClass(10);
-        var b = await CreateClass(10);
 
-        Assert.Equal(HttpStatusCode.Created, (await Hold(a, Sid(7))).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await Hold(b, Sid(7))).StatusCode);
+    [Fact]
+    public async Task Two_backend_instances_never_exceed_total_seats()
+    {
+        const int seats = 5;
+        const int attempts = 40;
+        var classId = await CreateClass(seats);
+
+        using var second = new ApiFactory();
+        var client2 = second.CreateClient();
+
+        Task<HttpResponseMessage> Send(HttpClient c, string studentId)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"/classes/{classId}/holds");
+            req.Headers.Add("X-Student-Id", studentId);
+            return c.SendAsync(req);
+        }
+
+        var results = await Task.WhenAll(
+            Enumerable.Range(200, attempts).Select(n => Send(n % 2 == 0 ? _client : client2, Sid(n))));
+
+        Assert.Equal(seats, results.Count(r => r.StatusCode == HttpStatusCode.Created));
+        Assert.Equal(attempts - seats, results.Count(r => r.StatusCode == HttpStatusCode.Conflict));
+
+        var c = await GetClass(classId);
+        Assert.Equal(seats, c.GetProperty("heldSeats").GetInt32() + c.GetProperty("confirmedSeats").GetInt32());
     }
 }
