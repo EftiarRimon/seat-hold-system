@@ -38,6 +38,20 @@ services:
     depends_on:
       - api
 
+  api2:
+    profiles: ["bonus"]
+    build: ./backend/SeatHold.Api
+    environment:
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=seats;Username=app;Password=app"
+      HOLD_DURATION_SECONDS: "600"
+      ONE_APPLICATION_PER_STUDENT: "true"
+    ports:
+      - "8200:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
   tests:
     profiles: ["test"]
     build:
