@@ -1,83 +1,79 @@
 # Seat Hold Admission System
 
-A class admission system where a student places a time-limited hold on a seat, pays the admission fee, and confirms. Seats are never oversold, even under concurrent requests.
+Online school admission with seat holds. A parent applies for a seat, the seat is held for a limited time, and the admission is confirmed when the fee is paid.
 
-**Stack:** .NET 8 Web API, PostgreSQL, React, Docker Compose.
+Backend: C# (.NET 10) + PostgreSQL. Frontend: React + TypeScript (Vite). Everything runs with Docker.
 
-## Quick start
+## Run
 
-Requirements: Docker Desktop.
+Only Docker is needed.
 
 ```bash
-git clone https://github.com/EftiarRimon/seat-hold-system.git
-cd seat-hold-system
-docker compose up -d --build
+docker compose up --build
 ```
 
-| Service  | URL                    |
-|----------|------------------------|
-| Frontend | http://localhost:5174  |
-| API      | http://localhost:TODO_API_PORT |
-| Postgres | localhost:TODO_DB_PORT (data persisted in a Docker volume) |
+| What | URL |
+|---|---|
+| Frontend (UI) | http://localhost:5174 |
+| Backend API | http://localhost:8080 |
+| PostgreSQL (host port) | localhost:5433 |
 
-Migrations run automatically when the API starts. Data survives `docker compose down`; use `docker compose down -v` to wipe it.
+- Stop: `docker compose down`. Data stays in the `pgdata` volume, so it survives `down` and `up`.
+- Delete data too: `docker compose down -v`.
+- If a host port is already used on your machine, change it in `docker-compose.yml` (for example `5174:80` for the frontend).
+
+## How to use the UI
+
+1. **School Admin** tab: create a class (name and number of seats). The same tab shows seat counts and the list of applicants (birth registration number, class, status, transaction number). A simple password gate protects this tab; the demo password is shown on the login screen.
+2. **Parent (অভিভাবক)** tab: enter the 17-digit birth registration number, press apply on a class, then pay the fee with a transaction number, or cancel.
+3. A held seat expires after `HOLD_DURATION_SECONDS`. The countdown is shown, and when it reaches zero the application becomes EXPIRED and the pay button is disabled, with no page reload.
+4. Seat counts refresh every few seconds. Refreshing the page or closing the browser keeps the student number and the student's applications.
 
 ## Configuration
 
-| Variable                | Default | Purpose |
-|-------------------------|---------|---------|
-| `HOLD_DURATION_SECONDS` | `600`   | How long a hold lasts before it expires |
-| `ADMIN_PASSWORD`        | (unset) | Password for the School Admin tab. If empty, admin login is disabled |
-| `ConnectionStrings__Default` | set in `docker-compose.yml` | PostgreSQL connection string |
-
-## How it works
-
-- **No overselling.** Creating a hold runs in one transaction: the class row is locked with `SELECT ... FOR UPDATE`, active holds plus confirmed seats are counted, and a hold is inserted only if the count is below `totalSeats`. Otherwise the API returns `409`. Because the lock lives in PostgreSQL, it also works with several API processes.
-- **Expiry without a background job.** Each hold stores `expiresAt`. A `HELD` hold with `expiresAt < now` is treated as `EXPIRED` whenever it is read or counted, so its seat is freed automatically.
-- **One application per student.** A student can have only one active (`HELD` or `CONFIRMED`) application across all classes, enforced by a transaction check and a unique index.
-- **Idempotent confirm.** Confirming an already `CONFIRMED` hold returns `200` and changes nothing. Only an unexpired hold owned by the same student can be confirmed.
-- **Payment.** Confirming requires a transaction number; the UI keeps the pay button disabled until one is entered.
-
-## API
-
-All student endpoints require the `X-Student-Id` header (17 digits).
-
-> TODO: verify these routes against your controllers and fix any that differ.
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET    | `/classes` | List classes with seats left |
-| POST   | `/classes` | Create a class (admin) |
-| DELETE | `/classes/{id}` | Delete a class (admin) |
-| POST   | `/classes/{id}/holds` | Hold a seat |
-| POST   | `/holds/{id}/confirm` | Confirm a hold with a transaction number |
-| DELETE | `/holds/{id}` | Cancel a hold |
-| GET    | `/admin/applicants` | List applicants (admin) |
-
-Status codes: `400` validation, `401` missing/invalid identity or admin login, `403` hold belongs to another student, `404` not found, `409` no seats left / duplicate application / invalid state.
-
-## Frontend
-
-- Student ID is entered at the top (17 digits, validated) and saved in `localStorage`.
-- Classes are polled every few seconds.
-- A countdown runs from `expiresAt`; at zero the hold shows `EXPIRED` and the pay button is disabled.
-- A **School Admin** tab manages classes and shows the applicant list.
+| Variable | Default | Meaning |
+|---|---|---|
+| `HOLD_DURATION_SECONDS` | `600` | How long a hold lasts |
+| `ConnectionStrings__Default` | set in `docker-compose.yml` | Database connection |
+| `VITE_API_URL` | `http://localhost:8080` | Backend URL used by the frontend (build argument) |
+| `ONE_APPLICATION_PER_STUDENT` | `true` | One active application per birth number across all classes. `false` means one per class only |
+| `ADMIN_PASSWORD` | demo default | Password for the School Admin screen and `GET /admin/holds`. The endpoints from the brief never need it |
 
 ## Tests
 
-Requires the .NET 8 SDK and a PostgreSQL instance on the test connection string (default `Host=localhost;Port=5433;Database=seats_test;Username=app;Password=app`, overridable with `TEST_DB`).
-
 ```bash
-dotnet test backend/SeatHold.Api.Tests
+docker compose --profile test run --rm --build tests
 ```
 
-Tests include a concurrency test that fires many parallel holds at one class and asserts `held + confirmed <= totalSeats`. The test factory forces `ADMIN_PASSWORD` empty so results do not depend on your shell.
+Runs the backend integration tests against a separate `seats_test` database, including a concurrency test: 40 parallel requests for 5 seats must produce exactly 5 holds and 35 `409` responses.
+
+## API
+
+Base URL `http://localhost:8080`, JSON. The student is identified by the `X-Student-Id` header (17-digit birth registration number).
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/classes` | Create a class |
+| GET | `/classes` | List classes with seat counts |
+| GET | `/classes/{classId}` | One class with seat counts |
+| POST | `/classes/{classId}/holds` | Apply (hold a seat). `409` if no seat |
+| GET | `/holds/{holdId}` | Current status of an application |
+| POST | `/holds/{holdId}/confirm` | Pay the fee and confirm. Optional body: `{ "transactionId": "..." }` |
+| DELETE | `/holds/{holdId}` | Cancel (`204`) |
+| GET | `/me/holds` | All applications of this student |
+
+Extra endpoints used by the admin screen: `GET /admin/status`, `POST /admin/login`, `GET /admin/holds`.
 
 ## Project layout
 
 ```
-backend/    .NET 8 API, migrations, tests
-frontend/   React app
-docker-compose.yml
-README.md  ASSUMPTIONS.md  AI_USAGE.md
+backend/SeatHold.Api         ASP.NET Core Web API, EF Core, migrations
+backend/SeatHold.Api.Tests   xUnit integration tests
+frontend/                    React + Vite UI (served by nginx in Docker)
+docker-compose.yml           db + api + frontend (+ tests with --profile test)
 ```
+
+## More
+
+- `ASSUMPTIONS.md`: decisions where the brief was silent, and why.
+- `AI_USAGE.md`: which AI tool was used, where it was wrong, and how I caught it.
